@@ -55,11 +55,8 @@ void SVC_Handler(void);
 void DebugMon_Handler(void);
 void PendSV_Handler(void);
 void SysTick_Handler(void);
-<<<<<<< Updated upstream
-=======
 void EXTI1_IRQHandler(void);
 void TIM1_UP_TIM16_IRQHandler(void);
->>>>>>> Stashed changes
 /* USER CODE BEGIN EFP */
 
 /* USER CODE END EFP */

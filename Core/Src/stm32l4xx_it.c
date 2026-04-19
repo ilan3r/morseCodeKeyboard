@@ -198,8 +198,6 @@ void SysTick_Handler(void)
 /* please refer to the startup file (startup_stm32l4xx.s).                    */
 /******************************************************************************/
 
-<<<<<<< Updated upstream
-=======
 /**
   * @brief This function handles EXTI line1 interrupt.
   */
@@ -228,7 +226,6 @@ void TIM1_UP_TIM16_IRQHandler(void)
   /* USER CODE END TIM1_UP_TIM16_IRQn 1 */
 }
 
->>>>>>> Stashed changes
 /* USER CODE BEGIN 1 */
 
 /* USER CODE END 1 */

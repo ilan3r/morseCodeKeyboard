@@ -32,6 +32,11 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+typedef enum{
+	noChange = 0,
+	risingEdge = 1,
+	fallingEdge = 2
+} buttonState;
 
 /* USER CODE END PD */
 
@@ -46,6 +51,8 @@ TIM_HandleTypeDef htim1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+
+volatile buttonState buttonEvent = noChange;
 
 /* USER CODE END PV */
 
@@ -135,9 +142,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-	  HAL_UART_Transmit(&huart2, (const uint8_t*) str, strlen(str), HAL_MAX_DELAY);
-	  HAL_Delay(1000);
 	  if (buttonEvent != noChange){
 		  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
 		  if (buttonEvent == risingEdge){	// button unpressed
@@ -323,7 +327,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : BUTTON_PIN_Pin */
   GPIO_InitStruct.Pin = BUTTON_PIN_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(BUTTON_PIN_GPIO_Port, &GPIO_InitStruct);
 
@@ -333,6 +337,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD3_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
