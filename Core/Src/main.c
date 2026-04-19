@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "string.h"
+#include "stdio.h"
 
 /* USER CODE END Includes */
 
@@ -32,11 +33,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
-typedef enum {
-    BUTTON_RELEASED = 0,
-    BUTTON_PRESSED  = 1
-} ButtonState_t;
 
 /* USER CODE END PD */
 
@@ -52,15 +48,13 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
-volatile ButtonState_t button_state = BUTTON_RELEASED;
+#define BUTTON_RELEASED 0
+#define BUTTON_PRESSED  1
 
-volatile uint8_t button_is_pressed = 0;
-volatile uint32_t press_time_ms = 0;         // how long current press has lasted
-volatile uint32_t release_time_ms = 0;       // how long current release has lasted
-volatile uint32_t last_press_duration_ms = 0;
-volatile uint32_t last_release_duration_ms = 0;
-volatile uint8_t press_event = 0;
-volatile uint8_t release_event = 0;
+volatile uint8_t buttonState = BUTTON_RELEASED; // 0 = released, 1 = pressed
+
+volatile uint32_t pressTimeMs = 0;
+volatile uint32_t releaseTimeMs = 0;
 
 
 /* USER CODE END PV */
@@ -77,46 +71,47 @@ static void MX_TIM1_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+void HAL_GPIO_EXTI_Callback(uint16_t gpioPin)
 {
-    if (GPIO_Pin == GPIO_PIN_1)
+    if (gpioPin == GPIO_PIN_1)
     {
-        GPIO_PinState pin = HAL_GPIO_ReadPin(BUTTON_PIN_GPIO_Port, BUTTON_PIN_Pin);
+        GPIO_PinState pinState = HAL_GPIO_ReadPin(BUTTON_PIN_GPIO_Port, BUTTON_PIN_Pin);
 
-        if (pin == GPIO_PIN_RESET)   // button pressed
+        if (pinState == GPIO_PIN_RESET)  // pressed (pull-up)
         {
-            button_state = BUTTON_PRESSED;
-            button_is_pressed = 1;
+            // Button just pressed
+        	char msg[64];
+        	sprintf(msg, "Button was released for: %lu ms\r\n", releaseTimeMs);
+        	HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
 
-            last_release_duration_ms = release_time_ms;
-            release_time_ms = 0;
-
-            press_event = 1;
+            releaseTimeMs = 0;
+            buttonState = 1;
         }
-        else                         // button released
+        else  // released
         {
-            button_state = BUTTON_RELEASED;
-            button_is_pressed = 0;
+            // Button just released
+        	char msg[64];
+        	sprintf(msg, "Button was pressed for: %lu ms\r\n", pressTimeMs);
+      	  	HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
 
-            last_press_duration_ms = press_time_ms;
-            press_time_ms = 0;
-
-            release_event = 1;
+            pressTimeMs = 0;
+            buttonState = 0;
         }
     }
 }
+
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM1)
     {
-        if (button_state == BUTTON_PRESSED)
+        if (buttonState == BUTTON_PRESSED)
         {
-            press_time_ms++;
+            pressTimeMs++;
         }
         else
         {
-            release_time_ms++;
+            releaseTimeMs++;
         }
     }
 }
@@ -163,6 +158,7 @@ int main(void)
 
   HAL_UART_Transmit(&huart2, (const uint8_t*) resetStr, strlen(resetStr), HAL_MAX_DELAY);
   HAL_TIM_Base_Start_IT(&htim1);
+
 
   /* USER CODE END 2 */
 
@@ -258,7 +254,7 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 32000-1;
+  htim1.Init.Prescaler = 32-1;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim1.Init.Period = 1000-1;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
