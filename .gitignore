@@ -1,0 +1,24 @@
+# Build output
+Debug/
+Release/
+build/
+
+# Object and dependency files
+*.o
+*.d
+
+# Linker/map/list files
+*.map
+*.list
+
+# Eclipse / STM32CubeIDE
+.project
+.cproject
+.settings/
+*.launch
+
+# CubeIDE internal
+*.cycleo
+
+# Temporary / misc
+*.log
