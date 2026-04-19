@@ -32,11 +32,11 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-typedef enum{
-	noChange = 0,
-	risingEdge = 1,
-	fallingEdge = 2
-} buttonState;
+
+typedef enum {
+    BUTTON_RELEASED = 0,
+    BUTTON_PRESSED  = 1
+} ButtonState_t;
 
 /* USER CODE END PD */
 
@@ -52,7 +52,16 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
-volatile buttonState buttonEvent = noChange;
+volatile ButtonState_t button_state = BUTTON_RELEASED;
+
+volatile uint8_t button_is_pressed = 0;
+volatile uint32_t press_time_ms = 0;         // how long current press has lasted
+volatile uint32_t release_time_ms = 0;       // how long current release has lasted
+volatile uint32_t last_press_duration_ms = 0;
+volatile uint32_t last_release_duration_ms = 0;
+volatile uint8_t press_event = 0;
+volatile uint8_t release_event = 0;
+
 
 /* USER CODE END PV */
 
@@ -72,15 +81,27 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     if (GPIO_Pin == GPIO_PIN_1)
     {
-        GPIO_PinState state = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_1);
+        GPIO_PinState pin = HAL_GPIO_ReadPin(BUTTON_PIN_GPIO_Port, BUTTON_PIN_Pin);
 
-        if (state == GPIO_PIN_SET)	// rising edge
+        if (pin == GPIO_PIN_RESET)   // button pressed
         {
-        	buttonEvent = risingEdge;
+            button_state = BUTTON_PRESSED;
+            button_is_pressed = 1;
+
+            last_release_duration_ms = release_time_ms;
+            release_time_ms = 0;
+
+            press_event = 1;
         }
-        else	// falling edge
+        else                         // button released
         {
-        	buttonEvent = fallingEdge;
+            button_state = BUTTON_RELEASED;
+            button_is_pressed = 0;
+
+            last_press_duration_ms = press_time_ms;
+            press_time_ms = 0;
+
+            release_event = 1;
         }
     }
 }
@@ -89,9 +110,18 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM1)
     {
-        HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
+        if (button_state == BUTTON_PRESSED)
+        {
+            press_time_ms++;
+        }
+        else
+        {
+            release_time_ms++;
+        }
     }
 }
+
+
 
 /* USER CODE END 0 */
 
@@ -129,8 +159,6 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
 
-  char risingEdgeStr[] = "button released (rising edge)!\r\n";
-  char fallingEdgeStr[] = "button pressed (falling edge)!\r\n";
   char resetStr[] = "reset the board\r\n";
 
   HAL_UART_Transmit(&huart2, (const uint8_t*) resetStr, strlen(resetStr), HAL_MAX_DELAY);
@@ -142,19 +170,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if (buttonEvent != noChange){
-		  HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-		  if (buttonEvent == risingEdge){	// button unpressed
-			  buttonEvent = noChange;
-			  HAL_UART_Transmit(&huart2, (const uint8_t*) risingEdgeStr, strlen(risingEdgeStr), HAL_MAX_DELAY);
 
-		  }
-		  else if (buttonEvent == fallingEdge){	 	// button pressed
-			  buttonEvent = noChange;
-			  HAL_UART_Transmit(&huart2, (const uint8_t*) fallingEdgeStr, strlen(fallingEdgeStr), HAL_MAX_DELAY);
-		  }
-
-	  }
 
     /* USER CODE END WHILE */
 
