@@ -29,6 +29,11 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
+typedef struct {
+	const char * pattern;
+	char letter;
+} MorseMap;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -50,19 +55,52 @@ UART_HandleTypeDef huart2;
 
 #define BUTTON_RELEASED 0
 #define BUTTON_PRESSED  1
+#define MORSE_BUFFER_SIZE 8
 
 volatile uint8_t buttonState = BUTTON_RELEASED; // 0 = released, 1 = pressed
 
 volatile uint32_t pressTimeMs = 0;
 volatile uint32_t releaseTimeMs = 0;
 
-const uint32_t shortPressLowerThreshold = 10;
+const uint32_t debounceUpperThreshold = 10;
 const uint32_t shortPressUpperThreshold = 200;
-const uint32_t longPressLowerThreshold = 200;
-const uint32_t longPressUpperThreshold = 3000;
+const uint32_t longPressUpperThreshold = 800;
 
-const uint32_t releaseTimeEnterThreshold = 1000;
+const uint32_t releaseTimeLowerThreshold = 800;
 
+volatile uint8_t morseBuffer[MORSE_BUFFER_SIZE];
+volatile uint8_t morseIndex = 0;
+
+volatile uint8_t morseReadyToDecode = 0;
+
+const MorseMap morseTable[] = {
+    {".-",   'A'},
+	{"-...", 'B'},
+	{"-.-.", 'C'},
+	{"-..",  'D'},
+    {".",    'E'},
+	{"..-.", 'F'},
+	{"--.",  'G'},
+	{"....", 'H'},
+    {"..",   'I'},
+	{".---", 'J'},
+	{"-.-",  'K'},
+	{".-..", 'L'},
+    {"--",   'M'},
+	{"-.",   'N'},
+	{"---",  'O'},
+	{".--.", 'P'},
+    {"--.-", 'Q'},
+	{".-.",  'R'},
+	{"...",  'S'},
+	{"-",    'T'},
+    {"..-",  'U'},
+	{"...-", 'V'},
+	{".--",  'W'},
+	{"-..-", 'X'},
+    {"-.--", 'Y'},
+	{"--..", 'Z'}
+};
 
 /* USER CODE END PV */
 
@@ -84,12 +122,11 @@ void HAL_GPIO_EXTI_Callback(uint16_t gpioPin)
     {
         GPIO_PinState pinState = HAL_GPIO_ReadPin(BUTTON_PIN_GPIO_Port, BUTTON_PIN_Pin);
 
-        if (pinState == GPIO_PIN_RESET)  // pressed (pull-up)
+        if (pinState == GPIO_PIN_RESET)  // pressed
         {
             // Button just pressed
-        	uint32_t duration = releaseTimeMs;
-        	if (releaseTimeMs >= releaseTimeEnterThreshold){
-        		HAL_UART_Transmit(&huart2, (const uint8_t*)  "\r\n", 2, HAL_MAX_DELAY);
+        	if (releaseTimeMs >= releaseTimeLowerThreshold){
+        		morseReadyToDecode = 1;
         	}
             releaseTimeMs = 0;
             buttonState = 1;
@@ -97,28 +134,21 @@ void HAL_GPIO_EXTI_Callback(uint16_t gpioPin)
         }
         else  // released
         {
-            // Button just released
-            uint32_t duration = pressTimeMs;
-            if (duration >= shortPressLowerThreshold && duration <= shortPressUpperThreshold){
-            	HAL_UART_Transmit(&huart2, (const uint8_t*) ".", 1, HAL_MAX_DELAY);
-            }
-            else if (duration >= longPressLowerThreshold && duration <= longPressUpperThreshold){
-            	HAL_UART_Transmit(&huart2, (const uint8_t*) "-", 1, HAL_MAX_DELAY);
-            }
-            else{
-            	if (duration > shortPressLowerThreshold){	// deal with button debouncing
-                	HAL_UART_Transmit(&huart2, (const uint8_t*)  "\r\n", 2, HAL_MAX_DELAY);
-                	char msg[64];
-                	sprintf(msg, "Button was pressed for: %lu ms\r\n", pressTimeMs);
-              	  	HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
-            	}
+            if (pressTimeMs >= debounceUpperThreshold && pressTimeMs < shortPressUpperThreshold && morseIndex < MORSE_BUFFER_SIZE-1){
+            	morseBuffer[morseIndex++] = '.';
 
+            }
+            else if (pressTimeMs >= shortPressUpperThreshold && pressTimeMs <= longPressUpperThreshold && morseIndex < MORSE_BUFFER_SIZE-1){
+            	morseBuffer[morseIndex++] = '-';
             }
             pressTimeMs = 0;
             buttonState = 0;
+            morseReadyToDecode = 0;
         }
     }
 }
+
+
 
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -132,10 +162,22 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         else
         {
             releaseTimeMs++;
+
+
         }
     }
 }
 
+
+char decodeMorse(const char * message){
+	int tableSize = sizeof(morseTable) / sizeof(morseTable[0]);
+	for (int i = 0; i < tableSize; i++){
+		if (strcmp(message, morseTable[i].pattern) == 0){
+			return morseTable[i].letter;
+		}
+	}
+	return '?';
+}
 
 
 /* USER CODE END 0 */
@@ -179,6 +221,8 @@ int main(void)
   HAL_UART_Transmit(&huart2, (const uint8_t*) resetStr, strlen(resetStr), HAL_MAX_DELAY);
   HAL_TIM_Base_Start_IT(&htim1);
 
+  char msg[64] = {0};
+
 
   /* USER CODE END 2 */
 
@@ -186,7 +230,30 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	    if (morseReadyToDecode)
+	    {
+	        char localBuffer[MORSE_BUFFER_SIZE];
 
+	        __disable_irq();
+
+	        strcpy(localBuffer, (char *)morseBuffer);
+
+	        morseIndex = 0;
+	        morseBuffer[0] = '\0';
+	        morseReadyToDecode = 0;
+	        releaseTimeMs = 0;
+	        memset((char*) morseBuffer, 0, MORSE_BUFFER_SIZE);
+
+	        __enable_irq();
+
+	        char decodedChar = decodeMorse(localBuffer);
+
+	        sprintf(msg, "Morse: %s\r\n", localBuffer);
+	        HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), HAL_MAX_DELAY);
+
+	        sprintf(msg, "Decoded: %c\r\n", decodedChar);
+	        HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), HAL_MAX_DELAY);
+	    }
 
     /* USER CODE END WHILE */
 
