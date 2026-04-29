@@ -56,6 +56,13 @@ volatile uint8_t buttonState = BUTTON_RELEASED; // 0 = released, 1 = pressed
 volatile uint32_t pressTimeMs = 0;
 volatile uint32_t releaseTimeMs = 0;
 
+const uint32_t shortPressLowerThreshold = 10;
+const uint32_t shortPressUpperThreshold = 200;
+const uint32_t longPressLowerThreshold = 200;
+const uint32_t longPressUpperThreshold = 3000;
+
+const uint32_t releaseTimeEnterThreshold = 1000;
+
 
 /* USER CODE END PV */
 
@@ -80,20 +87,33 @@ void HAL_GPIO_EXTI_Callback(uint16_t gpioPin)
         if (pinState == GPIO_PIN_RESET)  // pressed (pull-up)
         {
             // Button just pressed
-        	char msg[64];
-        	sprintf(msg, "Button was released for: %lu ms\r\n", releaseTimeMs);
-        	HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
-
+        	uint32_t duration = releaseTimeMs;
+        	if (releaseTimeMs >= releaseTimeEnterThreshold){
+        		HAL_UART_Transmit(&huart2, (const uint8_t*)  "\r\n", 2, HAL_MAX_DELAY);
+        	}
             releaseTimeMs = 0;
             buttonState = 1;
+
         }
         else  // released
         {
             // Button just released
-        	char msg[64];
-        	sprintf(msg, "Button was pressed for: %lu ms\r\n", pressTimeMs);
-      	  	HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+            uint32_t duration = pressTimeMs;
+            if (duration >= shortPressLowerThreshold && duration <= shortPressUpperThreshold){
+            	HAL_UART_Transmit(&huart2, (const uint8_t*) ".", 1, HAL_MAX_DELAY);
+            }
+            else if (duration >= longPressLowerThreshold && duration <= longPressUpperThreshold){
+            	HAL_UART_Transmit(&huart2, (const uint8_t*) "-", 1, HAL_MAX_DELAY);
+            }
+            else{
+            	if (duration > shortPressLowerThreshold){	// deal with button debouncing
+                	HAL_UART_Transmit(&huart2, (const uint8_t*)  "\r\n", 2, HAL_MAX_DELAY);
+                	char msg[64];
+                	sprintf(msg, "Button was pressed for: %lu ms\r\n", pressTimeMs);
+              	  	HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
+            	}
 
+            }
             pressTimeMs = 0;
             buttonState = 0;
         }
