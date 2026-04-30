@@ -18,11 +18,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "string.h"
 #include "stdio.h"
+#include "usbd_hid.h"
 
 /* USER CODE END Includes */
 
@@ -33,6 +35,17 @@ typedef struct {
 	const char * pattern;
 	char letter;
 } MorseMap;
+
+typedef struct {
+	uint8_t modifier;
+	uint8_t reserved;
+	uint8_t keycode1;
+	uint8_t keycode2;
+	uint8_t keycode3;
+	uint8_t keycode4;
+	uint8_t keycode5;
+	uint8_t keycode6;
+} KeyboardReportDes;
 
 /* USER CODE END PTD */
 
@@ -52,6 +65,10 @@ TIM_HandleTypeDef htim1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+
+KeyboardReportDes HIDkeyboard = {0, 0, 0, 0, 0, 0, 0, 0};
+
+extern USBD_HandleTypeDef hUsbDeviceFS;
 
 #define BUTTON_RELEASED 0
 #define BUTTON_PRESSED  1
@@ -179,6 +196,34 @@ char decodeMorse(const char * message){
 	return '?';
 }
 
+void handleMorseCodeUART(void){
+	if (morseReadyToDecode)
+	{
+		char msg[64] = {0};
+		char localBuffer[MORSE_BUFFER_SIZE];
+
+		__disable_irq();
+
+		strcpy(localBuffer, (char *)morseBuffer);
+
+		morseIndex = 0;
+		morseBuffer[0] = '\0';
+		morseReadyToDecode = 0;
+		releaseTimeMs = 0;
+		memset((char*) morseBuffer, 0, MORSE_BUFFER_SIZE);
+
+		__enable_irq();
+
+		char decodedChar = decodeMorse(localBuffer);
+
+		sprintf(msg, "Morse: %s\r\n", localBuffer);
+		HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), HAL_MAX_DELAY);
+
+		sprintf(msg, "Decoded: %c\r\n", decodedChar);
+		HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), HAL_MAX_DELAY);
+	}
+}
+
 
 /* USER CODE END 0 */
 
@@ -213,6 +258,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_TIM1_Init();
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
 
 
@@ -221,7 +267,7 @@ int main(void)
   HAL_UART_Transmit(&huart2, (const uint8_t*) resetStr, strlen(resetStr), HAL_MAX_DELAY);
   HAL_TIM_Base_Start_IT(&htim1);
 
-  char msg[64] = {0};
+  KeyboardReportDes HIDkeyboard = {0, 0, 0, 0, 0, 0, 0, 0};
 
 
   /* USER CODE END 2 */
@@ -230,30 +276,18 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	    if (morseReadyToDecode)
-	    {
-	        char localBuffer[MORSE_BUFFER_SIZE];
-
-	        __disable_irq();
-
-	        strcpy(localBuffer, (char *)morseBuffer);
-
-	        morseIndex = 0;
-	        morseBuffer[0] = '\0';
-	        morseReadyToDecode = 0;
-	        releaseTimeMs = 0;
-	        memset((char*) morseBuffer, 0, MORSE_BUFFER_SIZE);
-
-	        __enable_irq();
-
-	        char decodedChar = decodeMorse(localBuffer);
-
-	        sprintf(msg, "Morse: %s\r\n", localBuffer);
-	        HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), HAL_MAX_DELAY);
-
-	        sprintf(msg, "Decoded: %c\r\n", decodedChar);
-	        HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), HAL_MAX_DELAY);
-	    }
+	  HIDkeyboard.modifier = 0x02; // left shift - print char in upper case
+	  HIDkeyboard.keycode1 = 0x04;	// letter A
+	  HIDkeyboard.keycode2 = 0x05;	// letter B
+	  HIDkeyboard.keycode3 = 0x06;	// letter C
+	  USBD_HID_SendReport(&hUsbDeviceFS, (uint8_t*) &HIDkeyboard, sizeof(HIDkeyboard));
+	  HAL_Delay(50);
+	  HIDkeyboard.modifier = 0x00;  // release key
+	  HIDkeyboard.keycode1 = 0x00;	// release key
+	  HIDkeyboard.keycode2 = 0x00;	// release key
+	  HIDkeyboard.keycode3 = 0x00;	// release key
+	  USBD_HID_SendReport(&hUsbDeviceFS, (uint8_t*) &HIDkeyboard, sizeof(HIDkeyboard));
+	  HAL_Delay(500);
 
     /* USER CODE END WHILE */
 
@@ -451,7 +485,7 @@ static void MX_GPIO_Init(void)
 /* USER CODE END 4 */
 
 /**
-  * @brief  This function is executed in case of error occurrence.
+  * @brief  TUs function is executed in case of error occurrence.
   * @retval None
   */
 void Error_Handler(void)
