@@ -260,6 +260,7 @@ int main(void)
   MX_TIM1_Init();
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
+  HAL_Delay(1000);
 
 
   char resetStr[] = "reset the board\r\n";
@@ -278,14 +279,10 @@ int main(void)
   {
 	  HIDkeyboard.modifier = 0x02; // left shift - print char in upper case
 	  HIDkeyboard.keycode1 = 0x04;	// letter A
-	  HIDkeyboard.keycode2 = 0x05;	// letter B
-	  HIDkeyboard.keycode3 = 0x06;	// letter C
 	  USBD_HID_SendReport(&hUsbDeviceFS, (uint8_t*) &HIDkeyboard, sizeof(HIDkeyboard));
 	  HAL_Delay(50);
 	  HIDkeyboard.modifier = 0x00;  // release key
 	  HIDkeyboard.keycode1 = 0x00;	// release key
-	  HIDkeyboard.keycode2 = 0x00;	// release key
-	  HIDkeyboard.keycode3 = 0x00;	// release key
 	  USBD_HID_SendReport(&hUsbDeviceFS, (uint8_t*) &HIDkeyboard, sizeof(HIDkeyboard));
 	  HAL_Delay(500);
 
