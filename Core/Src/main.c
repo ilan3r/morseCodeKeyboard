@@ -79,6 +79,8 @@ volatile uint8_t buttonState = BUTTON_RELEASED; // 0 = released, 1 = pressed
 volatile uint32_t pressTimeMs = 0;
 volatile uint32_t releaseTimeMs = 0;
 
+const uint8_t uartDebugging = 0;
+
 const uint32_t debounceUpperThreshold = 10;
 const uint32_t shortPressUpperThreshold = 200;
 const uint32_t longPressUpperThreshold = 800;
@@ -196,33 +198,60 @@ char decodeMorse(const char * message){
 	return '?';
 }
 
-void handleMorseCodeUART(void){
-	if (morseReadyToDecode)
-	{
-		char msg[64] = {0};
-		char localBuffer[MORSE_BUFFER_SIZE];
+uint8_t charToHidKeycode(char c)
+{
+    if (c >= 'A' && c <= 'Z')
+    {
+        return 0x04 + (c - 'A');
+    }
 
-		__disable_irq();
+    if (c >= 'a' && c <= 'z')
+    {
+        return 0x04 + (c - 'a');
+    }
 
-		strcpy(localBuffer, (char *)morseBuffer);
-
-		morseIndex = 0;
-		morseBuffer[0] = '\0';
-		morseReadyToDecode = 0;
-		releaseTimeMs = 0;
-		memset((char*) morseBuffer, 0, MORSE_BUFFER_SIZE);
-
-		__enable_irq();
-
-		char decodedChar = decodeMorse(localBuffer);
-
-		sprintf(msg, "Morse: %s\r\n", localBuffer);
-		HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), HAL_MAX_DELAY);
-
-		sprintf(msg, "Decoded: %c\r\n", decodedChar);
-		HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), HAL_MAX_DELAY);
-	}
+    return 0x00;
 }
+
+
+void sendKeyboardChar(char c)
+{
+    KeyboardReportDes report = {0};
+
+    uint8_t keycode = charToHidKeycode(c);
+
+    if (keycode == 0x00)
+    {
+        return;
+    }
+
+    // Press key
+    report.modifier = 0x02;      // left shift for uppercase
+    report.keycode1 = keycode;
+
+    USBD_HID_SendReport(&hUsbDeviceFS, (uint8_t *)&report, sizeof(report));
+    HAL_Delay(20);
+
+    // Release key
+    memset(&report, 0, sizeof(report));
+
+    USBD_HID_SendReport(&hUsbDeviceFS, (uint8_t *)&report, sizeof(report));
+    HAL_Delay(20);
+}
+
+
+
+void testHIDkeyboard(void){
+	  HIDkeyboard.modifier = 0x02; // left shift - print char in upper case
+	  HIDkeyboard.keycode1 = 0x04;	// letter A
+	  USBD_HID_SendReport(&hUsbDeviceFS, (uint8_t*) &HIDkeyboard, sizeof(HIDkeyboard));
+	  HAL_Delay(50);
+	  HIDkeyboard.modifier = 0x00;  // release key
+	  HIDkeyboard.keycode1 = 0x00;	// release key
+	  USBD_HID_SendReport(&hUsbDeviceFS, (uint8_t*) &HIDkeyboard, sizeof(HIDkeyboard));
+	  HAL_Delay(500);
+}
+
 
 
 /* USER CODE END 0 */
@@ -277,14 +306,33 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  HIDkeyboard.modifier = 0x02; // left shift - print char in upper case
-	  HIDkeyboard.keycode1 = 0x04;	// letter A
-	  USBD_HID_SendReport(&hUsbDeviceFS, (uint8_t*) &HIDkeyboard, sizeof(HIDkeyboard));
-	  HAL_Delay(50);
-	  HIDkeyboard.modifier = 0x00;  // release key
-	  HIDkeyboard.keycode1 = 0x00;	// release key
-	  USBD_HID_SendReport(&hUsbDeviceFS, (uint8_t*) &HIDkeyboard, sizeof(HIDkeyboard));
-	  HAL_Delay(500);
+
+		if (morseReadyToDecode)
+		{
+			char msg[64] = {0};
+			char localBuffer[MORSE_BUFFER_SIZE];
+
+			__disable_irq();
+
+			strcpy(localBuffer, (char *)morseBuffer);
+
+			morseIndex = 0;
+			morseBuffer[0] = '\0';
+			morseReadyToDecode = 0;
+			releaseTimeMs = 0;
+			memset((char*) morseBuffer, 0, MORSE_BUFFER_SIZE);
+
+			__enable_irq();
+
+			char decodedChar = decodeMorse(localBuffer);
+
+			if (uartDebugging){
+				sprintf(msg, "Morse: %s\r\n", localBuffer);
+				HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), HAL_MAX_DELAY);
+			}
+
+			sendKeyboardChar(decodedChar);
+		}
 
     /* USER CODE END WHILE */
 
